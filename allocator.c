@@ -113,15 +113,15 @@ void *malloc(size_t size)
     // block. If not, map a new memory region.
 
 	size_t real_sz = size+sizeof(struct mem_block);
-
+	
 	int page_sz = getpagesize();
-	size_t num_pages = real_sz /page_sz;
+	size_t num_pages = real_sz / page_sz;
 	if(real_sz % page_sz != 0) {
 		num_pages++;
 	}
 	size_t region_sz = num_pages * page_sz;
-
-	struct mem_block *block = mmap(NULL, size, 
+	
+	struct mem_block *block = mmap(NULL, region_sz, 
 		PROT_READ | PROT_WRITE, 
 		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
@@ -129,15 +129,26 @@ void *malloc(size_t size)
 		perror("mmap");
 		return NULL;
 	}
-
+	
 	block->alloc_id = g_allocations++;
-	bloc->size = region_sz;
+	block->size = region_sz;
 	block->usage = real_sz;
 	block->region_start = block;
 	block->region_size = region_sz;
 	block->next = NULL;
 
-    return block;
+	if(g_head == NULL) {
+		g_head = block;
+	} else {
+		struct mem_block *blk = g_head;
+		while(blk->next != NULL) {
+			blk = block->next;
+		}
+		blk->next = block;
+	}
+
+	// print_memory();
+    return block+1;
 }
 
 void free(void *ptr)
