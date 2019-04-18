@@ -112,7 +112,32 @@ void *malloc(size_t size)
     // TODO: allocate memory. You'll first check if you can reuse an existing
     // block. If not, map a new memory region.
 
-    return NULL;
+	size_t real_sz = size+sizeof(struct mem_block);
+
+	int page_sz = getpagesize();
+	size_t num_pages = real_sz /page_sz;
+	if(real_sz % page_sz != 0) {
+		num_pages++;
+	}
+	size_t region_sz = num_pages * page_sz;
+
+	struct mem_block *block = mmap(NULL, size, 
+		PROT_READ | PROT_WRITE, 
+		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+	if(block == MAP_FAILED) {
+		perror("mmap");
+		return NULL;
+	}
+
+	block->alloc_id = g_allocations++;
+	bloc->size = region_sz;
+	block->usage = real_sz;
+	block->region_start = block;
+	block->region_size = region_sz;
+	block->next = NULL;
+
+    return block;
 }
 
 void free(void *ptr)
