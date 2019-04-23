@@ -113,14 +113,16 @@ void *malloc(size_t size)
     // block. If not, map a new memory region.
 
 	size_t real_sz = size+sizeof(struct mem_block);
-	
+	LOG("read size is: %zu\n", real_sz);
+
 	int page_sz = getpagesize();
 	size_t num_pages = real_sz / page_sz;
 	if(real_sz % page_sz != 0) {
 		num_pages++;
 	}
 	size_t region_sz = num_pages * page_sz;
-	
+
+	LOG("Allocated memo: %zu\n", size);
 	struct mem_block *block = mmap(NULL, region_sz, 
 		PROT_READ | PROT_WRITE, 
 		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -140,24 +142,28 @@ void *malloc(size_t size)
 	if(g_head == NULL) {
 		g_head = block;
 	} else {
-		struct mem_block *blk = g_head;
-		while(blk->next != NULL) {
-			blk = block->next;
+		LOG("g_head is: %p\n", g_head);
+		struct mem_block *curr = g_head;
+		while(curr->next != NULL) {
+			// LOG("curr is %p\n", curr);
+			curr = curr->next;
 		}
-		blk->next = block;
+		// LOG("LINKING %p to %p\n", curr, block);
+		curr->next = block;
 	}
 
 	// print_memory();
-    return block+1;
+    return block;
 }
 
 void free(void *ptr)
 {
+	LOGP("Entering free\n");
     if (ptr == NULL) {
         /* Freeing a NULL pointer does nothing */
         return;
     }
-
+    struct mem_block *block = (struct mem_block*) ptr;
     // TODO: free memory. If the containing region is empty (i.e., there are no
     // more blocks in use), then it should be unmapped.
 }
