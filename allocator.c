@@ -147,13 +147,14 @@ void *malloc(size_t size)
 		while(curr->next != NULL) {
 			// LOG("curr is %p\n", curr);
 			curr = curr->next;
+			// LOG("curr is %p\n", curr);
 		}
-		// LOG("LINKING %p to %p\n", curr, block);
+		LOG("LINKING %p to %p\n", curr, block);
 		curr->next = block;
 	}
 
 	// print_memory();
-    return block;
+    return block+1;
 }
 
 void free(void *ptr)
