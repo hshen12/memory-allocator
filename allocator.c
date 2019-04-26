@@ -100,6 +100,71 @@ void print_memory(void)
 	}
 }
 
+void first_fit_algo(size_t size, void *ptr) {
+
+	if(g_head == NULL) {
+		return;
+	} else {
+
+		struct mem_block *curr = g_head;
+		while(curr != NULL) {
+
+			if((curr->size-curr->usage) >= size) {
+				ptr = curr;
+				return;
+			}
+
+			curr = curr->next;
+		}
+	}
+}
+
+void best_fit_algo(size_t size, void *ptr) {
+
+
+	size_t min = SIZE_MAX;
+	if(g_head == NULL) {
+		return;
+	} else {
+
+		struct mem_block *curr = g_head;
+		while(curr != NULL) {
+
+			if((curr->size-curr->usage) >= size) {
+				if(curr->size < min) {
+					ptr = curr;
+					min = curr->size;
+				}
+			}
+
+			curr = curr->next;
+		}
+	}
+}
+
+void worst_fit_algo(size_t size, void *ptr) {
+
+	size_t max = SIZE_MIN;
+	if(g_head == NULL) {
+		return;
+	} else {
+
+		struct mem_block *curr = g_head;
+		while(curr != NULL) {
+
+			if((curr->size-curr->usage) >= size) {
+				if(curr->size > max) {
+					ptr = curr;
+					max = curr->size;
+				}
+			}
+
+			curr = curr->next;
+		}
+	}
+
+}
+
 void *reuse(size_t size) {
 	assert(g_head != NULL);
 
@@ -110,22 +175,16 @@ void *reuse(size_t size) {
 
 	void *ptr = NULL;
 	if (strcmp(algo, "first_fit") == 0) {
-		first_fit_algo(size);
+		first_fit_algo(size, ptr);
 	} else if (strcmp(algo, "best_fit") == 0) {
 		best_fit_algo(size, ptr);
 	} else if (strcmp(algo, "worst_fit") == 0) {
 		worst_fit_algo(size, ptr);
 	}
 
-
-
-
-
-
-
     // TODO: using free space management algorithms, find a block of memory that
     // we can reuse. Return NULL if no suitable block is found.
-	return NULL;
+	return ptr;
 }
 
 void *malloc(size_t size)
