@@ -22,6 +22,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <pthread.h>
+#include <stdlib.h>
 
 
 #ifndef DEBUG
@@ -100,73 +101,71 @@ void print_memory(void)
 	}
 }
 
-void first_fit_algo(size_t size, void *ptr) {
+void* first_fit_algo(size_t size) {
 
-	if(g_head == NULL) {
-		return;
-	} else {
+	struct mem_block *curr = g_head;
+	while(curr != NULL) {
 
-		struct mem_block *curr = g_head;
-		while(curr != NULL) {
-
-			if((curr->size-curr->usage) >= size) {
-				ptr = curr;
-				return;
-			}
-
-			curr = curr->next;
+		if((curr->size-curr->usage) >= size) {
+			return curr;
 		}
+
+		curr = curr->next;
 	}
+	return NULL;
 }
 
-void best_fit_algo(size_t size, void *ptr) {
+void best_fit_algo(size_t size) {
 
-
-	size_t min = SIZE_MAX;
-	if(g_head == NULL) {
-		return;
-	} else {
-
-		struct mem_block *curr = g_head;
-		while(curr != NULL) {
-
-			if((curr->size-curr->usage) >= size) {
-				if(curr->size < min) {
-					ptr = curr;
-					min = curr->size;
-				}
+	struct mem_block *re_block = NULL;
+	size_t max = SIZE_MAX;
+	
+	struct mem_block *curr = g_head;
+	while(curr != NULL) {
+		size_t remain = curr->size-curr->usage;
+		if(remain >= size) {
+			if(remain == size) {
+				return curr;
 			}
-
-			curr = curr->next;
+			if(remain < max) {
+				re_block = curr;
+				max = remain;
+			}
 		}
+
+		curr = curr->next;
 	}
+	return re_block;
+	
 }
 
 void worst_fit_algo(size_t size, void *ptr) {
 
-	size_t max = SIZE_MIN;
+	struct mem_block *re_block = NULL;
+	size_t min = 0;
 	if(g_head == NULL) {
 		return;
 	} else {
-
 		struct mem_block *curr = g_head;
 		while(curr != NULL) {
-
-			if((curr->size-curr->usage) >= size) {
-				if(curr->size > max) {
-					ptr = curr;
-					max = curr->size;
+			size_t remain = curr->size-curr->usage;
+			if(remain >= size) {
+				if(remain > min) {
+					re_block = curr;
+					min = remain;
 				}
 			}
 
 			curr = curr->next;
 		}
 	}
-
+	return re_block;
 }
 
 void *reuse(size_t size) {
-	assert(g_head != NULL);
+	if(g_head == NULL) {
+		return NULL;
+	}
 
 	char *algo = getenv("ALLOCATOR_ALGORITHM");
 	if (algo == NULL) {
@@ -175,11 +174,11 @@ void *reuse(size_t size) {
 
 	void *ptr = NULL;
 	if (strcmp(algo, "first_fit") == 0) {
-		first_fit_algo(size, ptr);
+		ptr = first_fit_algo(size);
 	} else if (strcmp(algo, "best_fit") == 0) {
-		best_fit_algo(size, ptr);
+		ptr = best_fit_algo(size);
 	} else if (strcmp(algo, "worst_fit") == 0) {
-		worst_fit_algo(size, ptr);
+		ptr = worst_fit_algo(size);
 	}
 
     // TODO: using free space management algorithms, find a block of memory that
@@ -192,71 +191,112 @@ void *malloc(size_t size)
     // TODO: allocate memory. You'll first check if you can reuse an existing
     // block. If not, map a new memory region.
 
-	size_t real_sz = size+sizeof(struct mem_block);
-	// LOG("read size is: %zu\n", real_sz);
+	void *reuse_mem = reuse(size);
 
-	int page_sz = getpagesize();
-	size_t num_pages = real_sz / page_sz;
-	if(real_sz % page_sz != 0) {
-		num_pages++;
-	}
-	size_t region_sz = num_pages * page_sz;
+	if(reuse_mem == NULL) {
 
-	// LOG("Allocated memo: %zu\n", size);
-	struct mem_block *block = mmap(NULL, region_sz, 
-		PROT_READ | PROT_WRITE, 
-		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		size_t real_sz = size+sizeof(struct mem_block);
 
-	if(block == MAP_FAILED) {
-		perror("mmap");
-		return NULL;
-	}
-	
-	block->alloc_id = g_allocations++;
-	block->size = region_sz;
-	block->usage = real_sz;
-	block->region_start = block;
-	block->region_size = region_sz;
-	block->next = NULL;
-
-	if(g_head == NULL) {
-		g_head = block;
-	} else {
-		// LOG("g_head is: %p\n", g_head);
-		struct mem_block *curr = g_head;
-		while(curr->next != NULL) {
-			// LOG("curr is %p\n", curr);
-			curr = curr->next;
-			// LOG("curr is %p\n", curr);
+		int page_sz = getpagesize();
+		size_t num_pages = real_sz / page_sz;
+		if(real_sz % page_sz != 0) {
+			num_pages++;
 		}
-		// LOG("LINKING %p to %p\n", curr, block);
-		curr->next = block;
+		size_t region_sz = num_pages * page_sz;
+
+		struct mem_block *block = mmap(NULL, region_sz, 
+			PROT_READ | PROT_WRITE, 
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+		if(block == MAP_FAILED) {
+			perror("mmap");
+			return NULL;
+		}
+
+		block->alloc_id = g_allocations++;
+		block->size = region_sz;
+		block->usage = real_sz;
+		block->region_start = block;
+		block->region_size = region_sz;
+		block->next = NULL;
+
+		if(g_head == NULL) {
+			g_head = block;
+		} else {
+			struct mem_block *curr = g_head;
+			while(curr->next != NULL) {
+				curr = curr->next;
+			}
+			curr->next = block;
+			// curr->size = curr->usage;
+		}
+
+		return block+1;
+
+	} else {
+		(struct mem_block) reuse_mem;
+		if (reuse_mem->usage == 0) {
+			
+			size_t real_sz = size+sizeof(struct mem_block);
+			reuse_mem->usage = real_sz;
+
+
+
+
+
+
+		} else {
+
+
+
+
+
+
+
+
+		}
 	}
 
-	return block+1;
+
+
+
+
 }
 
 void free(void *ptr)
 {	
-	print_memory();
-	// LOGP("Entering free\n");
-	if (ptr == NULL) {
-        /* Freeing a NULL pointer does nothing */
-		return;
-	}
-	int page_sz = getpagesize();
-	struct mem_block *block = (struct mem_block*) ptr;
-	if(block->usage == sizeof(struct mem_block)) {
+	if (ptr == NULL) {                                          
+        /* Freeing a NULL pointer does nothing */               
+		return;                                                 
+	}                                                           
 
-		LOGP("here");
-		int result = munmap(block, page_sz);
-		if(result == -1) {
-			perror("munmap");
-		}
+    /* Section 01: we didn't quite finish this below: (ptr -1) */                                                            
+	struct mem_block *blk = (struct mem_block*) ptr - 1;        
+	LOG("Free request; allocation = %lu\n", blk->alloc_id);     
+
+    // TODO: algorithm for figuring out if we can free a region:
+    // 1. go to region start                                    
+    // 2. traverse through the linked list                      
+    // 3. stop when you:                                        
+    //     a. find something that's not free                    
+    //     b. when you find the start of a different region     
+    // 4. if (a) move on; if (b) then munmap                    
+
+    /* Update the linked list */                                                            
+	if (blk == g_head) {                                        
+		g_head = blk->next;                                     
+	} else {                                                    
+		struct mem_block *prev = g_head;                        
+		while (prev->next != blk) {                             
+			prev = prev->next;                                  
+		}                                                       
+		prev->next = blk->next;                                 
+	}                                                           
+
+	int ret = munmap(blk->region_start, blk->region_size);      
+	if (ret == -1) {                                            
+		perror("munmap");                                       
 	}
-    // TODO: free memory. If the containing region is empty (i.e., there are no
-    // more blocks in use), then it should be unmapped.
-	print_memory();
 }
 
 void *calloc(size_t nmemb, size_t size)
