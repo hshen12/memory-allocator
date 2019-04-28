@@ -225,7 +225,7 @@ void *malloc(size_t size)
 			curr->next = block;
 			// curr->size = curr->usage;
 		}
-		LOGP("HERE");
+		// LOGP("HERE");
 		return block+1;
 
 	} else {
@@ -249,7 +249,7 @@ void *malloc(size_t size)
 
 void free(void *ptr)
 {	
-	return;
+	// return;
 	if (ptr == NULL) {                                          
         /* Freeing a NULL pointer does nothing */               
 		return;                                                 
@@ -257,14 +257,30 @@ void free(void *ptr)
 
     /* Section 01: we didn't quite finish this below: (ptr -1) */                                                            
 	struct mem_block *blk = (struct mem_block*) ptr - 1;        
-	LOG("Free request; allocation = %lu\n", blk->alloc_id);     
+	// LOG("Free request; allocation = %lu\n", blk->alloc_id);     
 	
-	struct mem_block *curr = g_head;
-
+	struct mem_block *curr = blk->region_start;
+	struct mem_block *temp = blk->region_start;
 	while(curr != NULL) {
 		if(curr->usage != 0) {
 			return;
-		} else if()
+		} else if(curr != temp) {
+			if (blk == g_head) {                                        
+				g_head = blk->next;                                     
+			} else {                                                    
+				struct mem_block *prev = g_head;                        
+				while (prev->next != blk) {                             
+					prev = prev->next;                                  
+				}                                                       
+				prev->next = blk->next;                                 
+			}                                                           
+
+			int ret = munmap(blk->region_start, blk->region_size);      
+			if (ret == -1) {                                            
+				perror("munmap");                                       
+			}
+			// munmap(temp, temp->region_size);
+		}
 
 		curr = curr->next;
 	}
@@ -277,20 +293,20 @@ void free(void *ptr)
     // 4. if (a) move on; if (b) then munmap                    
 
     /* Update the linked list */                                                            
-	if (blk == g_head) {                                        
-		g_head = blk->next;                                     
-	} else {                                                    
-		struct mem_block *prev = g_head;                        
-		while (prev->next != blk) {                             
-			prev = prev->next;                                  
-		}                                                       
-		prev->next = blk->next;                                 
-	}                                                           
+	// if (blk == g_head) {                                        
+	// 	g_head = blk->next;                                     
+	// } else {                                                    
+	// 	struct mem_block *prev = g_head;                        
+	// 	while (prev->next != blk) {                             
+	// 		prev = prev->next;                                  
+	// 	}                                                       
+	// 	prev->next = blk->next;                                 
+	// }                                                           
 
-	int ret = munmap(blk->region_start, blk->region_size);      
-	if (ret == -1) {                                            
-		perror("munmap");                                       
-	}
+	// int ret = munmap(blk->region_start, blk->region_size);      
+	// if (ret == -1) {                                            
+	// 	perror("munmap");                                       
+	// }
 }
 
 void *calloc(size_t nmemb, size_t size)
