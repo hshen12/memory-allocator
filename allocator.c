@@ -258,7 +258,16 @@ void free(void *ptr)
     /* Section 01: we didn't quite finish this below: (ptr -1) */                                                            
 	struct mem_block *blk = (struct mem_block*) ptr - 1;        
 	LOG("Free request; allocation = %lu\n", blk->alloc_id);     
+	
+	struct mem_block *curr = g_head;
 
+	while(curr != NULL) {
+		if(curr->usage != 0) {
+			return;
+		} else if()
+
+		curr = curr->next;
+	}
     // TODO: algorithm for figuring out if we can free a region:
     // 1. go to region start                                    
     // 2. traverse through the linked list                      
