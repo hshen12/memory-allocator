@@ -201,7 +201,7 @@ void *malloc(size_t size)
 		if(real_sz % page_sz != 0) {
 			num_pages++;
 		}
-        LOGP("2\n");
+        LOGP("4\n");
 		size_t region_sz = num_pages * page_sz;
 
 		struct mem_block *block = mmap(NULL, region_sz, 
@@ -238,7 +238,7 @@ void *malloc(size_t size)
 		if (reuse_struct->usage == 0) {
 			reuse_struct->usage = real_sz;
 			reuse_struct->alloc_id = g_allocations++;
-            LOG("malloc end|id = %lu, size = %zu, usage = %zu\n", reuse_struct->alloc_id, reuse_struct->size, reuse_struct->usage);
+            LOG("xxx- malloc end|id = %lu, size = %zu, usage = %zu\n", reuse_struct->alloc_id, reuse_struct->size, reuse_struct->usage);
 			return reuse_struct+1;
 		} else {
 			void * ptr = (void *)reuse_struct + reuse_struct->usage;
@@ -257,17 +257,19 @@ void *malloc(size_t size)
 
 void free(void *ptr)
 {
-    return;
+//    return;
 	LOGP("call free\n");
 	// return;
 	if (ptr == NULL) {                                          
         /* Freeing a NULL pointer does nothing */               
 		return;                                                 
-	}                                                           
-
+	}
+    
     /* Section 01: we didn't quite finish this below: (ptr -1) */                                                            
 	struct mem_block *blk = (struct mem_block*) ptr - 1;        
     LOG("Free request; id = %lu\n", blk->alloc_id);
+    
+    blk->usage = 0;
 	
 	struct mem_block *curr = blk->region_start;
 	struct mem_block *temp = blk->region_start;
