@@ -118,7 +118,7 @@ void *first_fit_algo(size_t size) {
 void *best_fit_algo(size_t size) {
 
 	struct mem_block *re_block = NULL;
-	size_t max = SIZE_MAX;
+	size_t min = SIZE_MAX;
 	
 	struct mem_block *curr = g_head;
 	while(curr != NULL) {
@@ -127,9 +127,9 @@ void *best_fit_algo(size_t size) {
 			if(remain == size) {
 				return curr;
 			}
-			if(remain < max) {
+			if(remain < min) {
 				re_block = curr;
-				max = remain;
+				min = remain;
 			}
 		}
 
@@ -142,14 +142,14 @@ void *best_fit_algo(size_t size) {
 void *worst_fit_algo(size_t size) {
 
 	struct mem_block *re_block = NULL;
-	size_t min = 0;
+	size_t max = 0;
 	struct mem_block *curr = g_head;
 	while(curr != NULL) {
 		size_t remain = curr->size-curr->usage;
 		if(remain >= size) {
-			if(remain > min) {
+			if(remain > max) {
 				re_block = curr;
-				min = remain;
+				max = remain;
 			}
 		}
 
@@ -187,11 +187,12 @@ void *malloc(size_t size)
 {
     // TODO: allocate memory. You'll first check if you can reuse an existing
     // block. If not, map a new memory region.
-
+	LOG("call malloc -- size: %zu\n", size);
 	size_t real_sz = size+sizeof(struct mem_block);
 	struct mem_block *reuse_struct = reuse(real_sz);
 
 	if(reuse_struct == NULL) {
+		LOGP("mmap a new region\n");
 		int page_sz = getpagesize();
 		size_t num_pages = real_sz / page_sz;
 		if(real_sz % page_sz != 0) {
@@ -229,6 +230,7 @@ void *malloc(size_t size)
 		return block+1;
 
 	} else {
+		LOGP("reuse a block\n");
 		if (reuse_struct->usage == 0) {
 			reuse_struct->usage = real_sz;
 			reuse_struct->alloc_id = g_allocations++;
@@ -249,6 +251,7 @@ void *malloc(size_t size)
 
 void free(void *ptr)
 {	
+	LOGP("call free\n");
 	// return;
 	if (ptr == NULL) {                                          
         /* Freeing a NULL pointer does nothing */               
@@ -264,21 +267,22 @@ void free(void *ptr)
 	while(curr != NULL) {
 		if(curr->usage != 0) {
 			return;
-		} else if(curr != temp) {
-			if (blk == g_head) {                                        
-				g_head = blk->next;                                     
-			} else {                                                    
+		} else if(curr->region_start != temp) {
+			if (temp == g_head) {
+				g_head = curr;                                     
+			} else {                
 				struct mem_block *prev = g_head;                        
-				while (prev->next != blk) {                             
+				while (prev->next != temp) {                             
 					prev = prev->next;                                  
 				}                                                       
-				prev->next = blk->next;                                 
+				prev->next = curr;                                 
 			}                                                           
 
-			int ret = munmap(blk->region_start, blk->region_size);      
+			int ret = munmap(temp, temp->region_size);      
 			if (ret == -1) {                                            
 				perror("munmap");                                       
 			}
+			return;
 			// munmap(temp, temp->region_size);
 		}
 
