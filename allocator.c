@@ -101,7 +101,7 @@ void print_memory(void)
 	}
 }
 
-void* first_fit_algo(size_t size) {
+void *first_fit_algo(size_t size) {
 
 	struct mem_block *curr = g_head;
 	while(curr != NULL) {
@@ -115,7 +115,7 @@ void* first_fit_algo(size_t size) {
 	return NULL;
 }
 
-void best_fit_algo(size_t size) {
+void *best_fit_algo(size_t size) {
 
 	struct mem_block *re_block = NULL;
 	size_t max = SIZE_MAX;
@@ -139,26 +139,23 @@ void best_fit_algo(size_t size) {
 	
 }
 
-void worst_fit_algo(size_t size, void *ptr) {
+void *worst_fit_algo(size_t size) {
 
 	struct mem_block *re_block = NULL;
 	size_t min = 0;
-	if(g_head == NULL) {
-		return;
-	} else {
-		struct mem_block *curr = g_head;
-		while(curr != NULL) {
-			size_t remain = curr->size-curr->usage;
-			if(remain >= size) {
-				if(remain > min) {
-					re_block = curr;
-					min = remain;
-				}
+	struct mem_block *curr = g_head;
+	while(curr != NULL) {
+		size_t remain = curr->size-curr->usage;
+		if(remain >= size) {
+			if(remain > min) {
+				re_block = curr;
+				min = remain;
 			}
-
-			curr = curr->next;
 		}
+
+		curr = curr->next;
 	}
+	
 	return re_block;
 }
 
@@ -191,12 +188,10 @@ void *malloc(size_t size)
     // TODO: allocate memory. You'll first check if you can reuse an existing
     // block. If not, map a new memory region.
 
-	void *reuse_mem = reuse(size);
+	size_t real_sz = size+sizeof(struct mem_block);
+	struct mem_block *reuse_struct = reuse(real_sz);
 
-	if(reuse_mem == NULL) {
-
-		size_t real_sz = size+sizeof(struct mem_block);
-
+	if(reuse_struct == NULL) {
 		int page_sz = getpagesize();
 		size_t num_pages = real_sz / page_sz;
 		if(real_sz % page_sz != 0) {
@@ -230,41 +225,31 @@ void *malloc(size_t size)
 			curr->next = block;
 			// curr->size = curr->usage;
 		}
-
+		LOGP("HERE");
 		return block+1;
 
 	} else {
-		(struct mem_block) reuse_mem;
-		if (reuse_mem->usage == 0) {
-			
-			size_t real_sz = size+sizeof(struct mem_block);
-			reuse_mem->usage = real_sz;
-
-
-
-
-
-
+		if (reuse_struct->usage == 0) {
+			reuse_struct->usage = real_sz;
+			reuse_struct->alloc_id = g_allocations++;
+			return reuse_struct+1;
 		} else {
-
-
-
-
-
-
-
-
+			void * ptr = (void *)reuse_struct + reuse_struct->usage;
+			struct mem_block * blkptr = (struct mem_block *) ptr;
+			blkptr->alloc_id = g_allocations++;
+			blkptr->usage = real_sz;
+			blkptr->size = reuse_struct->size-reuse_struct->usage;
+			blkptr->next = reuse_struct->next;
+			reuse_struct->next = blkptr;
+			reuse_struct->size = reuse_struct->usage;
+			return blkptr + 1;
 		}
 	}
-
-
-
-
-
 }
 
 void free(void *ptr)
 {	
+	return;
 	if (ptr == NULL) {                                          
         /* Freeing a NULL pointer does nothing */               
 		return;                                                 
@@ -324,4 +309,3 @@ void *realloc(void *ptr, size_t size)
 
 	return NULL;
 }
-
