@@ -102,18 +102,18 @@ void print_memory(void)
 }
 
 void *first_fit_algo(size_t size) {
-    LOG("first-fit - size = %zu\n", size);
+	LOG("first-fit - size = %zu\n", size);
 	struct mem_block *curr = g_head;
 	while(curr != NULL) {
 
 		if((curr->size-curr->usage) >= size) {
-            LOG("first-fit end id = %lu\n", curr->alloc_id);
+			LOG("first-fit end id = %lu\n", curr->alloc_id);
 			return curr;
 		}
 
 		curr = curr->next;
 	}
-    LOGP("first-fit end NULL\n");
+	LOGP("first-fit end NULL\n");
 	return NULL;
 }
 
@@ -162,7 +162,7 @@ void *worst_fit_algo(size_t size) {
 }
 
 void *reuse(size_t size) {
-    LOGP("call reuse\n");
+	LOGP("call reuse\n");
 	if(g_head == NULL) {
 		return NULL;
 	}
@@ -190,7 +190,7 @@ void *malloc(size_t size)
 {
     // TODO: allocate memory. You'll first check if you can reuse an existing
     // block. If not, map a new memory region.
-	LOG("call malloc -- size: %zu\n", size);
+	LOG("1call malloc -- size: %zu\n", size);
 	size_t real_sz = size+sizeof(struct mem_block);
 	struct mem_block *reuse_struct = reuse(real_sz);
 
@@ -201,7 +201,7 @@ void *malloc(size_t size)
 		if(real_sz % page_sz != 0) {
 			num_pages++;
 		}
-        LOGP("4\n");
+		LOGP("here\n");
 		size_t region_sz = num_pages * page_sz;
 
 		struct mem_block *block = mmap(NULL, region_sz, 
@@ -230,7 +230,7 @@ void *malloc(size_t size)
 			curr->next = block;
 			// curr->size = curr->usage;
 		}
-         LOG("malloc end|id = %lu, size = %zu, usage = %zu\n", block->alloc_id, block->size, block->usage);
+		LOG("malloc end|id = %lu, size = %zu, usage = %zu\n", block->alloc_id, block->size, block->usage);
 		return block+1;
 
 	} else {
@@ -238,18 +238,19 @@ void *malloc(size_t size)
 		if (reuse_struct->usage == 0) {
 			reuse_struct->usage = real_sz;
 			reuse_struct->alloc_id = g_allocations++;
-            LOG("xxx- malloc end|id = %lu, size = %zu, usage = %zu\n", reuse_struct->alloc_id, reuse_struct->size, reuse_struct->usage);
+			LOG("xxx- malloc end|id = %lu, size = %zu, usage = %zu\n", reuse_struct->alloc_id, reuse_struct->size, reuse_struct->usage);
 			return reuse_struct+1;
 		} else {
 			void * ptr = (void *)reuse_struct + reuse_struct->usage;
 			struct mem_block * blkptr = (struct mem_block *) ptr;
 			blkptr->alloc_id = g_allocations++;
+			blkptr->region_start = reuse_struct->region_start;
 			blkptr->usage = real_sz;
 			blkptr->size = reuse_struct->size-reuse_struct->usage;
 			blkptr->next = reuse_struct->next;
 			reuse_struct->next = blkptr;
 			reuse_struct->size = reuse_struct->usage;
-            LOG("malloc end|id = %lu, size = %zu, usage = %zu\n", blkptr->alloc_id, blkptr->size, blkptr->usage);
+			LOG("malloc end|id = %lu, size = %zu, usage = %zu\n", blkptr->alloc_id, blkptr->size, blkptr->usage);
 			return blkptr + 1;
 		}
 	}
@@ -264,18 +265,18 @@ void free(void *ptr)
         /* Freeing a NULL pointer does nothing */               
 		return;                                                 
 	}
-    
+
     /* Section 01: we didn't quite finish this below: (ptr -1) */                                                            
 	struct mem_block *blk = (struct mem_block*) ptr - 1;        
-    LOG("Free request; id = %lu\n", blk->alloc_id);
-    
-    blk->usage = 0;
+	LOG("Free request; id = %lu\n", blk->alloc_id);
+
+	blk->usage = 0;
 	
 	struct mem_block *curr = blk->region_start;
 	struct mem_block *temp = blk->region_start;
 	while(curr != NULL) {
 		if(curr->usage != 0) {
-            LOGP("free end - move on\n");
+			LOGP("free end - move on\n");
 			return;
 		} else if(curr->region_start != temp) {
 			if (temp == g_head) {
@@ -292,7 +293,7 @@ void free(void *ptr)
 			if (ret == -1) {                                            
 				perror("munmap");                                       
 			}
-            LOGP("Free end - munmap\n");
+			LOGP("Free end - munmap\n");
 			return;
 			// munmap(temp, temp->region_size);
 		}
