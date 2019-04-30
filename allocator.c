@@ -1,4 +1,4 @@
-/**
+ /**
  * allocator.c
  *
  * Explores memory management at the C runtime level.
@@ -61,6 +61,15 @@ struct mem_block {
 	struct mem_block *next;
 };
 
+void scribbling (void *ptr, size_t length, char fill) {
+    char *temp = (char *) ptr;
+    size_t i;
+    for(i = 0; i < length; i++) {
+        *temp = fill;
+        temp++;
+    }
+}
+
 /* Start (head) of our linked list: */
 struct mem_block *g_head = NULL;
 
@@ -103,9 +112,36 @@ void print_memory(void)
 		current_block = current_block->next;
 	}
 }
+void write_memory(FILE * fp)
+{
+    fprintf(fp, "-- Current Memory State --\n");
+    struct mem_block *current_block = g_head;
+    struct mem_block *current_region = NULL;
+    while (current_block != NULL) {
+        LOGP("1\n");
+        if (current_block->region_start != current_region) {
+            LOGP("3\n");
+            current_region = current_block->region_start;
+            fprintf(fp, "[REGION] %p-%p %zu\n",
+                   current_region,
+                   (void *) current_region + current_region->region_size,
+                   current_region->region_size);
+        }
+        LOGP("2\n");
+        fprintf(fp, "[BLOCK]  %p-%p (%ld) %zu %zu %zu\n",
+               current_block,
+               (void *) current_block + current_block->size,
+               current_block->alloc_id,
+               current_block->size,
+               current_block->usage,
+               current_block->usage == 0
+               ? 0 : current_block->usage - sizeof(struct mem_block));
+        current_block = current_block->next;
+    }
+}
 
 void *first_fit_algo(size_t size) {
-//    LOG("first-fit - size = %zu\n", size);
+    LOG("first-fit - size = %zu\n", size);
 	struct mem_block *curr = g_head;
 	while(curr != NULL) {
 
@@ -120,7 +156,7 @@ void *first_fit_algo(size_t size) {
 }
 
 void *best_fit_algo(size_t size) {
-
+    LOG("best-fit - size = %zu\n", size);
 	struct mem_block *re_block = NULL;
 	size_t min = SIZE_MAX;
 	
@@ -144,7 +180,7 @@ void *best_fit_algo(size_t size) {
 }
 
 void *worst_fit_algo(size_t size) {
-
+    LOG("worst-fit - size = %zu\n", size);
 	struct mem_block *re_block = NULL;
 	size_t max = 0;
 	struct mem_block *curr = g_head;
@@ -188,7 +224,7 @@ void *reuse(size_t size) {
 	return ptr;
 }
 
-void *malloc(size_t size)
+void *malloc_size(size_t size)
 {
     // TODO: allocate memory. You'll first check if you can reuse an existing
     // block. If not, map a new memory region.
@@ -233,7 +269,7 @@ void *malloc(size_t size)
 			// curr->size = curr->usage;
 		}
          LOG("111malloc end|id = %lu, size = %zu, usage = %zu\n", block->alloc_id, block->size, block->usage);
-		return block+1;
+		return block;
 
 	} else {
 		LOG("reuse a block id = %lu\n", reuse_struct->alloc_id);
@@ -241,7 +277,7 @@ void *malloc(size_t size)
 			reuse_struct->usage = real_sz;
 			reuse_struct->alloc_id = g_allocations++;
             LOG("222- malloc end|id = %lu, size = %zu, usage = %zu\n", reuse_struct->alloc_id, reuse_struct->size, reuse_struct->usage);
-			return reuse_struct+1;
+			return reuse_struct;
 		} else {
 			void * ptr = (void *)reuse_struct + reuse_struct->usage;
 			struct mem_block * blkptr = (struct mem_block *) ptr;
@@ -253,9 +289,17 @@ void *malloc(size_t size)
 			reuse_struct->next = blkptr;
 			reuse_struct->size = reuse_struct->usage;
             LOG("333malloc end|reuse_id = %lu, id = %lu, size = %zu, usage = %zu | check - %lu\n", reuse_struct->alloc_id, blkptr->alloc_id, blkptr->size, blkptr->usage, reuse_struct->next->alloc_id);
-			return blkptr + 1;
+			return blkptr;
 		}
 	}
+}
+
+void *malloc(size_t size) {
+    pthread_mutex_lock(&g_alloc_mutex);
+    struct mem_block *blk = malloc_size(size);
+    scribbling(blk + 1, blk->usage - sizeof(struct mem_block), 0xAA);
+    pthread_mutex_unlock(&g_alloc_mutex);
+    return blk + 1;
 }
 
 void free(void *ptr)
@@ -263,11 +307,12 @@ void free(void *ptr)
 //    return;
 	LOGP("call free\n");
 	// return;
-	if (ptr == NULL) {                                          
+	if (ptr == NULL) {
         /* Freeing a NULL pointer does nothing */               
 		return;                                                 
 	}
-    
+    pthread_mutex_lock(&g_alloc_mutex);
+
     /* Section 01: we didn't quite finish this below: (ptr -1) */                                                            
 	struct mem_block *blk = (struct mem_block*) ptr - 1;        
     LOG("Free request; id = %lu\n", blk->alloc_id);
@@ -277,31 +322,34 @@ void free(void *ptr)
 	struct mem_block *curr = blk->region_start;
 	struct mem_block *temp = blk->region_start;
 	while(curr != NULL) {
-		if(curr->usage != 0) {
-            LOGP("free end - move on\n");
-			return;
-		} else if(curr->region_start != temp) {
-			if (temp == g_head) {
-				g_head = curr;                                     
-			} else {                
-				struct mem_block *prev = g_head;                        
-				while (prev->next != temp) {                             
-					prev = prev->next;                                  
-				}                                                       
-				prev->next = curr;                                 
-			}                                                           
-
-			int ret = munmap(temp, temp->region_size);      
-			if (ret == -1) {                                            
-				perror("munmap");                                       
-			}
-            LOGP("Free end - munmap\n");
-			return;
+		if(curr->region_start != temp) {
+            break;
 			// munmap(temp, temp->region_size);
-		}
+        } else if (curr->usage != 0) {
+            LOGP("free end - move on\n");
+            pthread_mutex_unlock(&g_alloc_mutex);
+            return;
+        }
 
 		curr = curr->next;
 	}
+    if (temp == g_head) {
+        g_head = curr;
+    } else {
+        struct mem_block *prev = g_head;
+        while (prev->next != temp) {
+            prev = prev->next;
+        }
+        prev->next = curr;
+    }
+    
+    int ret = munmap(temp, temp->region_size);
+    if (ret == -1) {
+        perror("munmap");
+    }
+    LOGP("Free end - munmap\n");
+    pthread_mutex_unlock(&g_alloc_mutex);
+    return;
     // TODO: algorithm for figuring out if we can free a region:
     // 1. go to region start                                    
     // 2. traverse through the linked list                      
@@ -325,13 +373,23 @@ void free(void *ptr)
 	// if (ret == -1) {                                            
 	// 	perror("munmap");                                       
 	// }
+    pthread_mutex_unlock(&g_alloc_mutex);
 }
 
 void *calloc(size_t nmemb, size_t size)
 {
+    
+    
+    pthread_mutex_lock(&g_alloc_mutex);
+//    void *malloc(size_t size) {
+        struct mem_block *blk = malloc_size(size);
+        scribbling(blk + 1, blk->usage - sizeof(struct mem_block), 0);
+    pthread_mutex_unlock(&g_alloc_mutex);
+        return blk + 1;
+//    }
     // TODO: hmm, what does calloc do?
-	return NULL;
 }
+
 
 void *realloc(void *ptr, size_t size)
 {
@@ -349,6 +407,37 @@ void *realloc(void *ptr, size_t size)
 	}
 
     // TODO: reallocation logic
+    pthread_mutex_lock(&g_alloc_mutex);
 
-	return NULL;
+    struct mem_block *blk = (struct mem_block *) ptr - 1;
+    size_t real_sz = size + sizeof(struct mem_block);
+    if (blk->size >= real_sz) {
+        // update usage
+        blk->usage = real_sz;
+        pthread_mutex_unlock(&g_alloc_mutex);
+
+        return ptr;
+    } else {
+        // 1. malloc new block
+        pthread_mutex_unlock(&g_alloc_mutex);
+
+        void *new_blk = malloc(size);
+        pthread_mutex_lock(&g_alloc_mutex);
+
+        // 2. copy the data there
+        char * temp = (char *)new_blk;
+        char * temp_ptr =(char *) ptr;
+        int i;
+        for(i = 0; i < blk->usage; i++) {
+            *temp = *temp_ptr;
+            temp_ptr++;
+            temp++;
+        }
+        // 3. free the old block
+        free(ptr);
+        pthread_mutex_unlock(&g_alloc_mutex);
+        return new_blk;
+        
+    }
+//    void *ptr = malloc_size()
 }
