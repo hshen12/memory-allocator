@@ -68,14 +68,12 @@ struct mem_block {
  * @param fill   [char to fill]
  */
 void scribbling (void *ptr, size_t length, char fill) {
-	LOG("length is %zu fill is %c\n", length, fill);
 	char *temp = (char *) ptr;
 	size_t i;
 	for(i = 0; i < length; i++) {
 		*temp = fill;
 		temp++;
 	}
-	LOG("length is %zu fill is %c\n", length, fill);
 }
 
 /* Start (head) of our linked list: */
